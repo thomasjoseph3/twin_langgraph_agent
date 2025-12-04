@@ -1,9 +1,12 @@
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.egg-info/
+dist/
+build/
+*.egg
 
 # Virtual environments
 venv/
@@ -11,30 +14,15 @@ env/
 ENV/
 .venv
 
-# Environment files (will be passed via docker run or compose)
+# Environment variables (use --env-file instead)
 .env
-
-# Git
-.git/
-.gitignore
+.env.local
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Documentation
-README.md
-DEVELOPER_GUIDE.md
-
-# Test files
-test_*.py
-*_test.py
-
-# Logs
-*.log
-
 # OS
 .DS_Store
 Thumbs.db

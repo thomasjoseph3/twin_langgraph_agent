@@ -35,7 +35,7 @@ COPY --chown=appuser:appuser clients/ ./clients/
 COPY --chown=appuser:appuser tools/ ./tools/
 COPY --chown=appuser:appuser agent/ ./agent/
 COPY --chown=appuser:appuser metadata.py .
-COPY --chown=appuser:appuser main.py .
+COPY --chown=appuser:appuser api.py .
 
 # Set environment variables
 ENV PATH=/home/appuser/.local/bin:$PATH
@@ -45,9 +45,12 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Switch to non-root user
 USER appuser
 
-# Health check (optional - customize based on your needs)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "from config import settings; print('healthy')" || exit 1
+# Expose port
+EXPOSE 8000
 
-# Default command
-CMD ["python", "main.py"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+
+# Run FastAPI with uvicorn
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
