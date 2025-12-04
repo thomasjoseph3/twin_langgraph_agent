@@ -46,6 +46,22 @@ class InfluxDBClient:
             start_dt = datetime.utcnow() - timedelta(days=7)
             start_date = start_dt.isoformat() + "Z"
         
+        # Safety check: Estimate number of data points
+        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        duration = end_dt - start_dt
+        
+        # Estimate data points based on bucket duration
+        bucket_hours = self._duration_to_hours(time_bucket_duration)
+        estimated_points = duration.total_seconds() / (bucket_hours * 3600)
+        
+        # Warn if too many data points (soft limit - agent can still proceed)
+        if estimated_points > 365:
+            warning = f"⚠️ WARNING: Query will return ~{int(estimated_points)} data points. "
+            warning += f"Consider using larger buckets (P7D or P1M) or narrowing the time range. "
+            warning += f"Current bucket: {time_bucket_duration}, Duration: {duration.days} days"
+            # We'll include this warning in the response but still proceed
+        
         # Build request payload
         payload = {
             "dataConfig": {
@@ -142,3 +158,26 @@ class InfluxDBClient:
             return "\n".join(result)
         else:
             return " " * indent + str(data)
+    
+    def _duration_to_hours(self, iso_duration: str) -> float:
+        """Convert ISO 8601 duration to approximate hours."""
+        # Simple parser for common durations
+        duration = iso_duration.upper()
+        
+        if 'PT' in duration:  # Time component
+            if 'H' in duration:
+                return float(duration.split('T')[1].split('H')[0])
+            elif 'M' in duration and 'T' in duration:
+                return float(duration.split('T')[1].split('M')[0]) / 60
+        elif 'P' in duration:  # Date component
+            if 'Y' in duration:
+                return float(duration.replace('P', '').split('Y')[0]) * 365 * 24
+            elif 'M' in duration and 'T' not in duration:
+                return float(duration.replace('P', '').split('M')[0]) * 30 * 24
+            elif 'W' in duration:
+                return float(duration.replace('P', '').split('W')[0]) * 7 * 24
+            elif 'D' in duration:
+                return float(duration.replace('P', '').split('D')[0]) * 24
+        
+        return 24  # Default to 1 day if cannot parse
+

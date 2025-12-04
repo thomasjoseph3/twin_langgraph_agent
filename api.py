@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
+from datetime import datetime
 from agent import run_agent
 from metadata import get_agent_metadata
 
@@ -65,6 +66,10 @@ class QueryResponse(BaseModel):
         None,
         description="Echo of the entity context that was used"
     )
+    tools_used: Optional[list] = Field(
+        None,
+        description="List of tools called and their arguments (for debugging)"
+    )
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -101,19 +106,32 @@ async def query_agent(request: QueryRequest):
         if request.entity_context:
             entity_ctx_dict = request.entity_context.model_dump(exclude_none=True)
         
-        # Get metadata if not provided
-        metadata = request.metadata or get_agent_metadata()
+        # Get base metadata
+        base_metadata = request.metadata or get_agent_metadata()
         
-        # Run the agent
-        response = run_agent(
+        # Inject current time (UTC) for accurate date calculations
+        current_time_utc = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        metadata = f"""{base_metadata}
+
+**CURRENT TIME (UTC):** {current_time_utc}
+
+Use this exact time for all date calculations. 
+Example: If user asks "last week", calculate start_date as 7 days before {current_time_utc}"""
+        
+        # Run the agent and get tool usage
+        result = run_agent(
             query=request.query,
             metadata=metadata,
             entity_context=entity_ctx_dict
         )
         
+        # Unpack result (response_text, tools_used)
+        response_text, tools_used = result
+        
         return QueryResponse(
-            response=response,
-            entity_context=request.entity_context
+            response=response_text,
+            entity_context=request.entity_context,
+            tools_used=tools_used
         )
     
     except Exception as e:

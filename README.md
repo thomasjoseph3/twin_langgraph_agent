@@ -121,17 +121,24 @@ const answer = await askAgent("What's the efficiency?");
 
 ---
 
-## How It Works
+## ✨ Key Features
 
-1. **Server starts**: Uvicorn loads `api.py`
-2. **Config loads**: `config/settings.py` reads `.env` file
-3. **Request arrives**: POST to `/query`
-4. **Agent processes**:
-   - Receives query + entity_context
-   - LLM understands user is viewing specific entity
-   - Chooses appropriate tool (current state or historical data)
-   - Calls JanusGraph/InfluxDB API
-   - Returns natural language response
+- **Natural Language Querying**: Ask questions in plain English (e.g., "How is the heat exchanger performing?").
+- **Multi-Source Data**: Combines real-time state (JanusGraph) and historical data (InfluxDB).
+- **Smart Historical Analysis**:
+    - **Dynamic Field Extraction**: Automatically identifies correct metrics for any entity type.
+    - **Smart Time Bucketing**: Auto-selects daily, hourly, or weekly buckets based on query range.
+    - **ISO 8601 Support**: Full understanding of time durations (`P1D`, `PT1H`).
+- **Context Awareness**: Remembers the current entity being viewed.
+- **Tool Usage Tracking**: Debugging visibility into exactly which tools and arguments the agent used.
+- **Production Ready**: Dockerized, configurable, and stateless.
+
+## 📚 Documentation
+
+- **[Developer Guide](DEVELOPER_GUIDE.md)**: Detailed architecture, tool mechanics, and setup instructions.
+- **[API Usage](API_USAGE.md)**: API endpoints and integration examples.
+- **[Deployment Guide](DEPLOYMENT.md)**: Docker and production deployment.
+- **[Test Questions](TEST_QUESTIONS.md)**: 40+ example queries to test capabilities.
 
 ---
 

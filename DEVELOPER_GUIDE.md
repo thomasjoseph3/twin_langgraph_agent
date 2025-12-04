@@ -225,6 +225,62 @@ data = client.get_historical_data(
 
 Tools are the building blocks that the agent can use to answer queries.
 
+#### Tool Architecture & Mechanics
+
+The agent uses a sophisticated workflow to ensure accurate data retrieval across different entity types and time ranges.
+
+**1. Dynamic Field Extraction (The "Look Before You Leap" Pattern)**
+
+Field names vary by entity type (e.g., `coilBundle.fluidInletTempC` for Heat Exchangers vs `inlet.pressureBar` for Pumps). The agent follows a strict workflow:
+
+1.  **Call `get_current_state_tool(entity_id)`** first.
+2.  **Analyze the response** to find available metrics in `telemetry`, `kpis`, and `derived` sections.
+3.  **Extract EXACT field names** that match the user's intent.
+4.  **Call `get_historical_data_tool`** using these exact names.
+
+**2. Smart Time Bucketing**
+
+To prevent context overflow and ensure useful visualizations, the agent selects time buckets based on the query duration:
+
+| Time Range | Bucket | Max Points | Example |
+|------------|--------|------------|---------|
+| < 7 days | `PT1H` | ~168 | "Last 3 days" → Hourly points |
+| 7-60 days | `P1D` | ~60 | "Last month" → Daily points |
+| 60-180 days | `P7D` | ~26 | "Last quarter" → Weekly points |
+| > 180 days | `P1M` | ~12 | "Last year" → Monthly points |
+
+**3. Smart Data Limits & Safety Checks**
+
+The `InfluxDBClient` includes safety mechanisms to prevent overloading the LLM context:
+- **Estimation**: Calculates expected data points before making the API call.
+- **Soft Limit**: Warns if the query would return > 365 data points.
+- **Guidance**: Suggests larger buckets (e.g., `P1M`) if the limit is exceeded.
+
+**4. Tool Usage Tracking (Debugging)**
+
+The API returns a `tools_used` field in the response, allowing developers to verify the agent's logic:
+
+```json
+{
+  "response": "The average temperature was...",
+  "tools_used": [
+    {
+      "tool": "get_current_state_tool",
+      "arguments": {"entity_id": 40976504}
+    },
+    {
+      "tool": "get_historical_data_tool",
+      "arguments": {
+        "data_points": "coilBundle.fluidInletTempC",
+        "time_bucket_duration": "P1D",
+        "start_date": "2025-11-27T...",
+        "end_date": "2025-12-04T..."
+      }
+    }
+  ]
+}
+```
+
 #### Current State Tool
 ```python
 @tool
@@ -237,11 +293,11 @@ def get_current_state_tool(entity_id: int) -> str:
 @tool
 def get_historical_data_tool(
     entity_id: int,
-    data_points: str,  # Comma-separated
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
+    data_points: str,  # Comma-separated EXACT field names
+    start_date: Optional[str] = None, # MANDATORY: Calculated from current time
+    end_date: Optional[str] = None,   # MANDATORY: Usually current time
     agg_type: str = "none",
-    time_bucket_duration: str = "P1D"
+    time_bucket_duration: str = "P1D" # Smart bucket selection
 ) -> str:
     """Retrieves historical time-series data with aggregation."""
 ```
@@ -282,6 +338,9 @@ Centralized metadata provider for agent context.
 - `get_agent_metadata() -> str`: Returns default metadata
 - `get_custom_metadata(user_context: str) -> str`: Adds custom context
 - `fetch_metadata_from_api() -> str`: Placeholder for dynamic metadata
+
+**Current Time Injection:**
+The API automatically injects the current UTC time into the metadata for every request. This ensures the agent can accurately calculate relative dates (e.g., "last week", "yesterday") regardless of when the server was started.
 
 **To customize:**
 Edit `get_agent_metadata()` to fetch from your actual source (API, database, file).
