@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     
     # Google Gemini Configuration
     gemini_api_key: str
-    llm_model: str = "gemini-2.0-flash-exp"
+    llm_model: str = "gemini-2.5-flash"
     
     # Platform API Configuration
     platform_base_url: str = "https://acme.thingspine.com/api"
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     auth_token: Optional[str] = None
     
     model_config = SettingsConfigDict(
-        env_file="/home/toobler/Desktop/inflex janus/.env",
+        env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"

@@ -238,6 +238,35 @@ Field names vary by entity type (e.g., `coilBundle.fluidInletTempC` for Heat Exc
 3.  **Extract EXACT field names** that match the user's intent.
 4.  **Call `get_historical_data_tool`** using these exact names.
 
+**1.5 Query Optimization - Batching Data Points**
+
+To minimize API calls and improve performance, the agent automatically batches multiple data points when they share the same query parameters:
+
+**Example - Before Optimization:**
+```python
+# 4 separate API calls (SLOW)
+get_historical_data_tool(entity_id=123, data_points="temperature", ...)
+get_historical_data_tool(entity_id=123, data_points="pressure", ...)
+get_historical_data_tool(entity_id=123, data_points="efficiency", ...)
+get_historical_data_tool(entity_id=123, data_points="noise", ...)
+```
+
+**Example - After Optimization:**
+```python
+# 1 batched API call (FAST - 75% fewer calls)
+get_historical_data_tool(
+    entity_id=123, 
+    data_points="temperature,pressure,efficiency,noise",
+    ...
+)
+```
+
+This optimization is automatic when metrics share:
+- Same entity ID
+- Same time range (start_date, end_date)
+- Same aggregation type
+- Same time bucket duration
+
 **2. Smart Time Bucketing**
 
 To prevent context overflow and ensure useful visualizations, the agent selects time buckets based on the query duration:

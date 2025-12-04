@@ -6,8 +6,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import MemorySaver  # For conversation memory
 from config import settings
 from tools import get_current_state_tool, get_historical_data_tool
+
+
+# Global memory instance - persist across agent creations
+GLOBAL_MEMORY = MemorySaver()
 
 
 class AgentState(TypedDict):
@@ -298,8 +303,8 @@ Only query other entities if the user explicitly asks about them by ID or name."
     # After tools, always return to agent
     workflow.add_edge("tools", "agent")
     
-    # Compile the graph
-    app = workflow.compile()
+    # Compile the graph with global memory checkpointer (shared across all agents)
+    app = workflow.compile(checkpointer=GLOBAL_MEMORY)
     
     return app
 
@@ -307,7 +312,8 @@ Only query other entities if the user explicitly asks about them by ID or name."
 def run_agent(
     query: str,
     metadata: Optional[str] = None,
-    entity_context: Optional[dict] = None
+    entity_context: Optional[dict] = None,
+    session_id: Optional[str] = None
 ) -> tuple[str, list]:
     """
     Convenience function to run the agent with a query.
@@ -317,6 +323,8 @@ def run_agent(
         metadata: Optional context to provide the agent. If None, uses default metadata from metadata.py
         entity_context: Optional dict with current entity info:
             {"entity_id": 40976504, "entity_name": "Heat Exchanger", "entity_type": "HeatExchanger"}
+        session_id: Optional session ID for conversation memory. Same session_id = same conversation context.
+            If None, generates a default one (memory will not persist across calls).
         
     Returns:
         Tuple of (response_string, tools_used_list)
@@ -336,8 +344,15 @@ def run_agent(
         "metadata": metadata
     }
     
-    # Run the agent
-    result = agent.invoke(initial_state)
+    # Use session_id for memory - same session maintains conversation context
+    config = {
+        "configurable": {
+            "thread_id": session_id or "default"  # Use provided session_id or default
+        }
+    }
+    
+    # Run the agent with memory config
+    result = agent.invoke(initial_state, config=config)
     
     # Extract tool usage information
     tools_used = []

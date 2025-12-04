@@ -35,12 +35,13 @@ class EntityContext(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    """Request body for agent queries."""
+    """Request model for query endpoint."""
     query: str = Field(..., description="User's natural language query")
     entity_context: Optional[EntityContext] = Field(
         None,
         description="Context about the entity the user is currently viewing"
     )
+    session_id: Optional[str] = None  # For conversation memory
     metadata: Optional[str] = Field(
         None,
         description="Additional context/metadata (optional)"
@@ -70,6 +71,10 @@ class QueryResponse(BaseModel):
         None,
         description="List of tools called and their arguments (for debugging)"
     )
+    session_id: Optional[str] = Field(
+        None,
+        description="Session ID for conversation memory tracking"
+    )
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -95,43 +100,42 @@ async def query_agent(request: QueryRequest):
     Example without entity context (user must specify ID):
     ```
     POST /query
-    {
-        "query": "What's the temperature of entity 40976504?"
-    }
-    ```
+    Process a natural language query about digital twin entities.
+    
+    The agent will:
+    - Understand user's question
+    - Call appropriate tools (current state, historical data)
+    - Return a natural language response with tool usage tracking
+    
+    Conversation Memory:
+    - Provide session_id to maintain conversation context
+    - Same session_id = agent remembers previous questions
+    - Different session_id = fresh conversation
     """
     try:
-        # Convert entity_context to dict if provided
-        entity_ctx_dict = None
-        if request.entity_context:
-            entity_ctx_dict = request.entity_context.model_dump(exclude_none=True)
+        # Extract current time for date calculations
+        current_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         
-        # Get base metadata
-        base_metadata = request.metadata or get_agent_metadata()
-        
-        # Inject current time (UTC) for accurate date calculations
-        current_time_utc = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        metadata = f"""{base_metadata}
+        # Add current time to metadata
+        metadata = f"""
+CURRENT TIME (UTC): {current_time}
 
-**CURRENT TIME (UTC):** {current_time_utc}
-
-Use this exact time for all date calculations. 
-Example: If user asks "last week", calculate start_date as 7 days before {current_time_utc}"""
+Use this exact time for all date calculations.
+"""
         
-        # Run the agent and get tool usage
-        result = run_agent(
+        # Run agent with session_id for memory
+        response_text, tools_used = run_agent(
             query=request.query,
             metadata=metadata,
-            entity_context=entity_ctx_dict
+            entity_context=request.entity_context.dict() if request.entity_context else None,
+            session_id=request.session_id  # Pass session_id for memory
         )
-        
-        # Unpack result (response_text, tools_used)
-        response_text, tools_used = result
         
         return QueryResponse(
             response=response_text,
             entity_context=request.entity_context,
-            tools_used=tools_used
+            tools_used=tools_used,
+            session_id=request.session_id  # Return session_id
         )
     
     except Exception as e:
