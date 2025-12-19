@@ -158,16 +158,43 @@ Edit `metadata.py` → `get_agent_metadata()` function
 
 ## Deployment
 
-### Docker
+### Docker (Quick)
 ```bash
+# Build and run with port mapping
 docker build -t digital-twin-agent .
-docker run -p 8000:8000 --env-file .env digital-twin-agent
+docker run -d -p 8000:8000 --env-file .env --name digital-twin-agent digital-twin-agent
 ```
 
-### Docker Compose
+### Docker Compose (Recommended)
 ```bash
+# Start in background
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
 ```
+
+**Note:** Port mapping (`-p 8000:8000` or `ports:` in docker-compose.yml) is required!
+
+For detailed deployment instructions, troubleshooting, and production setup, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
+---
+
+## Verification
+
+After starting the server (Docker or local), verify it's working:
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Should return: {"status":"healthy","service":"Digital Twin AI Agent"}
+```
+
+Access interactive API docs: **http://localhost:8000/docs**
 
 ---
 
@@ -177,8 +204,11 @@ docker-compose up -d
 |-------|----------|
 | `ModuleNotFoundError: pydantic_settings` | Run: `pip install pydantic-settings` |
 | `API key not valid` | Check `.env` has real API key (not placeholder) |
-| `404 Not Found` | Ensure endpoint is `/query` not `/queries` |
+| `404 Not Found` (Docker) | Missing port mapping - see [DEPLOYMENT.md](DEPLOYMENT.md#troubleshooting) |
+| `address already in use` | Port 8000 occupied - see [DEPLOYMENT.md](DEPLOYMENT.md#troubleshooting) |
 | Server won't start | Activate venv: `source venv/bin/activate` |
+
+For comprehensive troubleshooting, see **[DEPLOYMENT.md](DEPLOYMENT.md#troubleshooting)**.
 
 ---
 

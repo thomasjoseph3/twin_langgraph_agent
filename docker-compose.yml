@@ -8,6 +8,10 @@ services:
     image: digital-twin-agent:latest
     container_name: digital-twin-agent
     
+    # Port mapping
+    ports:
+      - "8000:8000"
+    
     # Environment variables from .env file
     env_file:
       - .env

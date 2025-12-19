@@ -20,8 +20,8 @@ The Digital Twin AI Agent is built using **LangGraph** and **Google Gemini** to 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    User Interface                        │
-│                   (CLI / main.py)                        │
+│                  FastAPI REST API                        │
+│                     (api.py)                             │
 └───────────────────────┬─────────────────────────────────┘
                         │
                         ▼
@@ -79,7 +79,7 @@ The Digital Twin AI Agent is built using **LangGraph** and **Google Gemini** to 
 │   └── digital_twin_agent.py # Main agent implementation
 │
 ├── metadata.py               # Metadata provider
-├── main.py                   # CLI entry point
+├── api.py                    # FastAPI server (entry point)
 ├── requirements.txt          # Python dependencies
 ├── .env                      # Environment variables (excluded from git)
 ├── .env.example             # Template for .env
@@ -123,9 +123,9 @@ The Digital Twin AI Agent is built using **LangGraph** and **Google Gemini** to 
    # Edit .env and add your GEMINI_API_KEY
    ```
 
-5. **Run the application**:
+5. **Run the API server**:
    ```bash
-   python main.py
+   uvicorn api:app --host 0.0.0.0 --port 8000 --reload
    ```
 
 ### Docker Setup
@@ -372,23 +372,20 @@ Edit `agent/digital_twin_agent.py`, find the `system_prompt` variable and update
 
 ### API Deployment
 
-To expose the agent as an API:
+The agent is already exposed as a FastAPI REST API via `api.py`.
 
-1. Add FastAPI to `requirements.txt`
-2. Create `api.py`:
-   ```python
-   from fastapi import FastAPI
-   from agent import run_agent
-   
-   app = FastAPI()
-   
-   @app.post("/query")
-   async def query(query: str):
-       response = run_agent(query)
-       return {"response": response}
-   ```
+**Development:**
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+```
 
-3. Run with: `uvicorn api:app --host 0.0.0.0 --port 8000`
+**Production with Gunicorn:**
+```bash
+pip install gunicorn
+gunicorn api:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed Docker deployment instructions.
 
 ---
 

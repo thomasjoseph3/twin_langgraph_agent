@@ -17,6 +17,7 @@ ENV/
 # Git
 .git/
 .gitignore
+.qodo/
 
 # IDE
 .vscode/

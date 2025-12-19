@@ -20,17 +20,12 @@
    docker-compose up -d
    ```
 
-3. **Interact with the agent**:
+3. **View logs**:
    ```bash
-   docker-compose exec digital-twin-agent python main.py
+   docker-compose logs -f digital-twin-agent
    ```
 
-4. **View logs**:
-   ```bash
-   docker-compose logs -f
-   ```
-
-5. **Stop the agent**:
+4. **Stop the agent**:
    ```bash
    docker-compose down
    ```
@@ -44,35 +39,70 @@
 
 2. **Run the container**:
    ```bash
-   docker run -it \
+   docker run -d \
+     -p 8000:8000 \
      --env-file .env \
      --name digital-twin-agent \
      digital-twin-agent:latest
    ```
 
-3. **Run with environment variables directly**:
+3. **View logs**:
    ```bash
-   docker run -it \
-     -e GEMINI_API_KEY="your_api_key" \
-     -e LLM_MODEL="gemini-2.0-flash-exp" \
-     -e PLATFORM_BASE_URL="https://acme.thingspine.com/api" \
-     -e TENANT_ID="your_tenant_id" \
-     --name digital-twin-agent \
-     digital-twin-agent:latest
+   docker logs -f digital-twin-agent
    ```
 
-### Option 3: Interactive Development
+4. **Stop the container**:
+   ```bash
+   docker stop digital-twin-agent
+   docker rm digital-twin-agent
+   ```
 
-Run the container with mounted source code for development:
+---
+
+## Verifying the Deployment
+
+### 1. Check Container Status
 
 ```bash
-docker run -it \
-  --env-file .env \
-  -v $(pwd):/app \
-  --name digital-twin-agent-dev \
-  digital-twin-agent:latest \
-  /bin/bash
+# For Docker Compose
+docker-compose ps
+
+# For Docker CLI
+docker ps | grep digital-twin-agent
 ```
+
+You should see status as `Up (healthy)` with port mapping `0.0.0.0:8000->8000/tcp`.
+
+### 2. Test Health Endpoint
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected response:
+```json
+{"status":"healthy","service":"Digital Twin AI Agent"}
+```
+
+### 3. Test Query Endpoint
+
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is the current temperature?",
+    "entity_context": {
+      "entity_id": 40976504,
+      "entity_name": "Heat Exchanger HX00-A3"
+    }
+  }'
+```
+
+### 4. Access Interactive API Documentation
+
+Open in your browser: **http://localhost:8000/docs**
+
+---
 
 ## Production Deployment
 
@@ -110,18 +140,11 @@ spec:
       containers:
       - name: agent
         image: digital-twin-agent:latest
+        ports:
+        - containerPort: 8000
         envFrom:
         - secretRef:
             name: digital-twin-secrets
-```
-
-### Health Checks
-
-The Dockerfile includes a basic health check. Customize based on your needs:
-
-```dockerfile
-HEALTHCHECK --interval=30s --timeout=10s \
-    CMD python -c "from config import settings; print('healthy')"
 ```
 
 ### Resource Limits
@@ -137,23 +160,83 @@ deploy:
 
 ### Scaling
 
-For horizontal scaling, convert to a REST API (see DEVELOPER_GUIDE.md) and run multiple instances behind a load balancer.
+For horizontal scaling, run multiple instances behind a load balancer. The agent is stateless and safe to scale horizontally.
+
+---
 
 ## Troubleshooting
 
-### Container won't start
-```bash
-docker logs digital-twin-agent
+### Issue: "Not Found" error when calling API
+
+**Cause**: Missing port mapping in `docker-compose.yml`
+
+**Solution**: Ensure `docker-compose.yml` has the `ports` section:
+```yaml
+services:
+  digital-twin-agent:
+    ports:
+      - "8000:8000"
 ```
 
-### Permission issues
-Ensure the container runs as non-root user (already configured in Dockerfile).
+Then restart:
+```bash
+docker-compose down
+docker-compose up -d
+```
 
-### Config not loading
-Verify `.env` file is in the same directory when using `--env-file`.
+### Issue: "address already in use" error
 
-### Memory issues
-Increase memory limits in docker-compose.yml or add `--memory` flag to docker run.
+**Cause**: Port 8000 is already occupied by another process
+
+**Solution**: Find and stop the conflicting process:
+```bash
+# Find what's using port 8000
+lsof -i :8000
+
+# Kill the process (replace PID with actual process ID)
+kill <PID>
+
+# Or use a different port in docker-compose.yml:
+ports:
+  - "8080:8000"  # Map host port 8080 to container port 8000
+```
+
+### Issue: ContainerConfig KeyError
+
+**Cause**: Corrupted container state from previous builds
+
+**Solution**: Remove old containers and images:
+```bash
+docker-compose down
+docker rm -f digital-twin-agent 2>/dev/null || true
+docker rmi digital-twin-agent:latest 2>/dev/null || true
+docker-compose up -d
+```
+
+### Issue: Container won't start
+
+**Check logs for errors:**
+```bash
+docker-compose logs digital-twin-agent
+```
+
+**Common issues:**
+- Missing `.env` file → Copy from `.env.example`
+- Invalid API key → Check `GEMINI_API_KEY` in `.env`
+- Permission issues → Container runs as non-root user (already configured)
+
+### Issue: Health check failing
+
+**Verify the application is running:**
+```bash
+# Check from inside the container
+docker-compose exec digital-twin-agent curl http://localhost:8000/health
+
+# Check container logs
+docker-compose logs digital-twin-agent | grep ERROR
+```
+
+---
 
 ## CI/CD Pipeline Example
 
@@ -181,6 +264,8 @@ jobs:
           docker push digital-twin-agent:${{ github.sha }}
 ```
 
+---
+
 ## Monitoring
 
 ### Logging
@@ -195,14 +280,18 @@ Logs are written to stdout. Collect with:
 
 Add Prometheus metrics by installing `prometheus-client` and exposing `/metrics` endpoint.
 
+---
+
 ## Backup & Recovery
 
 ### Configuration Backup
-- Back up `.env` file securely
-- Use version control for code (exclude `.env`)
+- Back up `.env` file securely (use secrets manager in production)
+- Use version control for code (exclude `.env` from git)
 
 ### State Management
 The agent is stateless. No data backup needed unless you add persistence.
+
+---
 
 ## Security Best Practices
 
@@ -211,6 +300,9 @@ The agent is stateless. No data backup needed unless you add persistence.
 3. ✅ **Multi-stage build**: Reduces final image size
 4. ✅ **No secrets in image**: Environment variables at runtime
 5. ✅ **Regular updates**: Rebuild with updated dependencies
+6. ✅ **Port mapping**: Only expose necessary ports
+
+---
 
 ## Performance Optimization
 
@@ -219,6 +311,46 @@ The agent is stateless. No data backup needed unless you add persistence.
 3. **Health checks**: Monitor container health
 4. **Resource limits**: Prevent resource exhaustion
 
+---
+
+## Docker Compose Configuration
+
+Your `docker-compose.yml` should include:
+
+```yaml
+version: '3.8'
+
+services:
+  digital-twin-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: digital-twin-agent:latest
+    container_name: digital-twin-agent
+    
+    # Port mapping (REQUIRED)
+    ports:
+      - "8000:8000"
+    
+    # Environment variables from .env file
+    env_file:
+      - .env
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+```
+
+---
+
 ## Support
 
-For issues, see DEVELOPER_GUIDE.md troubleshooting section.
+- Interactive API docs: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+- For detailed development info, see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
